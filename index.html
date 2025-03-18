@@ -1,1 +1,221 @@
- 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Орёл или Решка</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .balance {
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .bet-input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid var(--tg-theme-button-color, #3390ec);
+            border-radius: 8px;
+            background: var(--tg-theme-bg-color, #fff);
+            color: var(--tg-theme-text-color, #000);
+            font-size: 16px;
+            text-align: center;
+        }
+
+        .button {
+            width: 100%;
+            padding: 12px;
+            margin: 5px 0;
+            border: none;
+            border-radius: 8px;
+            background: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #fff);
+            font-size: 16px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .button:active {
+            opacity: 0.8;
+        }
+
+        .coin-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .coin-button {
+            flex: 1;
+            padding: 20px;
+            border: 2px solid var(--tg-theme-button-color, #3390ec);
+            border-radius: 8px;
+            background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+            color: var(--tg-theme-text-color, #000);
+            font-size: 18px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .coin-button.selected {
+            background: var(--tg-theme-button-color, #3390ec);
+            color: var(--tg-theme-button-text-color, #fff);
+        }
+
+        .result {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 18px;
+        }
+
+        .next-reward {
+            margin-top: 10px;
+            font-size: 14px;
+            color: var(--tg-theme-hint-color, #999);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="balance">
+            <h2>Баланс: <span id="balance">0</span> Ruscoin</h2>
+            <div class="next-reward">Следующий бонус через: <span id="nextReward">-</span></div>
+        </div>
+
+        <input type="number" id="betInput" class="bet-input" placeholder="Введите ставку" min="1">
+        <button onclick="setBet()" class="button">Установить ставку</button>
+
+        <div class="coin-buttons">
+            <div class="coin-button" onclick="selectCoin('heads')" id="headsButton">
+                Орёл 🦅
+            </div>
+            <div class="coin-button" onclick="selectCoin('tails')" id="tailsButton">
+                Решка 🪙
+            </div>
+        </div>
+
+        <button onclick="play()" class="button" id="playButton">Играть</button>
+        <div class="result" id="result"></div>
+    </div>
+
+    <script>
+        let tg = window.Telegram.WebApp;
+        let selectedCoin = null;
+        let currentBet = 0;
+
+        tg.expand();
+        tg.enableClosingConfirmation();
+
+        // Получаем баланс при загрузке
+        function getBalance() {
+            tg.sendData(JSON.stringify({
+                action: 'get_balance'
+            }));
+        }
+
+        // Устанавливаем ставку
+        function setBet() {
+            const betAmount = parseInt(document.getElementById('betInput').value);
+            if (isNaN(betAmount) || betAmount < 1) {
+                showResult('Введите корректную ставку');
+                return;
+            }
+
+            tg.sendData(JSON.stringify({
+                action: 'set_bet',
+                bet: betAmount
+            }));
+            currentBet = betAmount;
+        }
+
+        // Выбор стороны монеты
+        function selectCoin(coin) {
+            selectedCoin = coin;
+            document.getElementById('headsButton').classList.toggle('selected', coin === 'heads');
+            document.getElementById('tailsButton').classList.toggle('selected', coin === 'tails');
+        }
+
+        // Играть
+        function play() {
+            if (!selectedCoin) {
+                showResult('Выберите сторону монеты');
+                return;
+            }
+            if (currentBet <= 0) {
+                showResult('Установите ставку');
+                return;
+            }
+
+            tg.sendData(JSON.stringify({
+                action: 'play',
+                choice: selectedCoin
+            }));
+        }
+
+        // Показать результат
+        function showResult(message) {
+            document.getElementById('result').textContent = message;
+        }
+
+        // Обработка ответа от бота
+        tg.onEvent('message', function(message) {
+            try {
+                const data = JSON.parse(message.data);
+                
+                if (data.balance !== undefined) {
+                    document.getElementById('balance').textContent = data.balance;
+                }
+                
+                if (data.time_until_reward !== undefined) {
+                    document.getElementById('nextReward').textContent = data.time_until_reward;
+                }
+
+                if (data.error) {
+                    showResult(data.error);
+                    return;
+                }
+
+                if (data.result === 'win') {
+                    showResult(`Победа! +${data.win_amount} Ruscoin`);
+                    currentBet = 0;
+                } else if (data.result === 'lose') {
+                    showResult(`Проигрыш! -${data.lose_amount} Ruscoin`);
+                    currentBet = 0;
+                }
+
+                if (data.current_bet !== undefined) {
+                    currentBet = data.current_bet;
+                    document.getElementById('betInput').value = currentBet;
+                }
+            } catch (e) {
+                console.error('Error parsing message:', e);
+            }
+        });
+
+        // Получаем начальный баланс
+        getBalance();
+    </script>
+</body>
+</html> 
